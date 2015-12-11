@@ -1,3 +1,7 @@
+/*******************************************************************
+Reference: http://markorodriguez.com/2011/09/22/a-graph-based-movie-recommender-engine/
+*******************************************************************/
+
 //default path for our project files
 path = 'C:\\Users\\haris\\Development\\701'
 
