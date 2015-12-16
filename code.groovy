@@ -123,67 +123,83 @@ g.V().getAt(1085).map
 
 
 /************************************************************
-Collaborative Filtering : Starting with a user with userID 1
+Corated function
 *************************************************************/
-
-//get a user by id
-u = g.idx(T.v)[[userId:1]] >> 1
-//alternate:
-//u = g.V[[type:'User']][[userId:6032]]
-
-//all the edges with ratings greater than 3
-u.outE('rated').filter{it.getProperty('stars') > 3}.inV()
-
-// Edges for top rated movies for userID 6032
-//g.V[[type:'User']][[userId:6032]].outE('rated').filter{it.getProperty('stars') > 3}
-
-// Top rated movies by this user
-movies_count = g.V[[type:'User']][[userId:6032]].outE('rated').filter{it.getProperty('stars') > 3}.inV().count()
-movies = g.V[[type:'User']][[userId:6032]].outE('rated').filter{it.getProperty('stars') > 3}.inV() >> 82
-
-
-/**********************************************************
-Collaborative Filtering : Starting with a movie "Toy Story"
-***********************************************************/
-//get reference to 'Toy Story (1995)'
-v = g.idx(T.v)[[title:'Toy Story (1995)']] >> 1
-
 /*
+Defining a Step in Gremlin:
+It is possible  to create their own step definitions. 
+Simply add a closure that represents the step to the respective classes. The method to use is:
+Gremlin.defineStep(String stepName, List<Class> classes, Closure stepClosure);
+
+
 Define a step "corated(x)" which does the following:
-Start from a movie (eg. "Toy Story (1995)") 
-Get the incoming "rated" edges — inE(‘rated’)
-Filter out those edges whose star property is less than x — filter{it.getProperty(‘stars’) > x}
-Get the tail user vertices of the remaining edges — outV
-Get the rating edges of those user vertices — outE(‘rated’)
-Filter out those edges whose star property is less than 4 — filter{it.getProperty(‘stars’) > 3}
-Get the head movie vertices of the remaining edges — inV
+1.Start from a movie (eg. "Shawshank Redemption, The (1994)") 
+2.Get the incoming "rated" edges — inE(‘rated’)
+3.Filter out those edges whose star property is less than x — filter{it.getProperty(‘stars’) > x}
+4.Get the tail user vertices of the remaining edges — outV
+5.Get the rating edges of those user vertices — outE(‘rated’)
+6.Filter out those edges whose star property is less than 4 — filter{it.getProperty(‘stars’) > 3}
+7. Get the head movie vertices of the remaining edges — inV
 */
 Gremlin.defineStep('corated',[Vertex,Pipe], { def stars ->
   _().inE('rated').filter{it.getProperty('stars') > stars}.outV.outE('rated').filter{it.getProperty('stars') > stars}.inV})
 
-/*
-Get all the movies corated with Toy Story — v.corated(3)
-There will be many high rated paths from "Toy Story" to other movies, many (most) of these paths will lead to the same movies.
-It is possible to use these duplicates as a ranking mechanism–ultimately, a recommendation: 
-The higher number of paths to a movie starting from Toy Story, the higher the movie is corated to "Toy Story".
 
-For this, use a map, which stores the movies against the count of the number of paths to the movie from Toy Story.
+/**********************************************************
+Collaborative Filtering : Starting with a movie "Shawshank Redemption, The (1994)"
+***********************************************************/
+//get reference to 'Shawshank Redemption, The (1994)'
+v = g.idx(T.v)[[title:'Shawshank Redemption, The (1994)']] >> 1
+
+
+/*
+Get all the movies corated with Shawshank Redemption, The (1994) — v.corated(3)
+There will be many high rated paths from "Shawshank Redemption, The (1994)" to other movies, many (most) of these paths will lead to the same movies.
+It is possible to use these duplicates as a ranking mechanism–ultimately, a recommendation: 
+The higher number of paths to a movie starting from Shawshank Redemption, The (1994), the higher the movie is corated to "Shawshank Redemption, The (1994)".
+
+For this, use a map, which stores the movies against the count of the number of paths to the movie from Shawshank Redemption, The (1994).
 Sort the map by the count and return that as the recommendation list.
-Remove the reflexive paths by filtering out "Toy Story" itself, from the results — filter{it != v}
+Remove the reflexive paths by filtering out "Shawshank Redemption, The (1994)" itself, from the results — filter{it != v}
 */
 map = [:]  
 v.corated(3).filter{it != v}.title.groupCount(map) >> -1
 map.sort{a,b -> b.value <=> a.value}[0..9] 
 
+/************************************************************
+Collaborative Filtering : Starting with a user with userID 1
+*************************************************************/
+
+//get a user by id
+u = g.idx(T.v)[[userId:1]] >> 1
+
+//all the edges with ratings greater than 3
+list = []
+count =u.outE('rated').filter{it.getProperty('stars') > 3}.inV().count() 
+list = u.outE('rated').filter{it.getProperty('stars') > 3}.inV() >> (int) count
 /*
-Print the values
-i = 10
-for ( e in map ) {
-    println "movie = ${e.key}, count = ${e.value}"
-    i--;
-    if(i < 0) 
-    	break
-}
+// Top rated movies by this user
+movies_count = g.V[[type:'User']][[userId:6032]].outE('rated').filter{it.getProperty('stars') > 3}.inV().count()
+movies = g.V[[type:'User']][[userId:6032]].outE('rated').filter{it.getProperty('stars') > 3}.inV() >> 82
 */
+
+map = [:]
+list.each{ def v->
+x = [] as Set
+v.corated(3).filter{it != v}.title.groupCount(map) >> -1
+}
+map.sort{a,b -> b.value <=> a.value}[0..9] 
+
+
+/************************************************************
+Content : Starting with a user with userID 1
+*************************************************************/
+map = [:]
+list.each{ def v->
+x = [] as Set
+v.out('hasGenera').aggregate(x).back(2).corated(3).filter{it != v}.filter{it.out('hasGenera')>>[] as Set == x}.title.groupCount(map) >> -1
+//v.out('hasGenera').aggregate(x).back(2).corated(3).filter{it != v}.out('hasGenera').retain(x).back(2).title.groupCount(map) >> -1
+}
+map.sort{a,b -> b.value <=> a.value}[0..9] 
 	
 g.stopTransaction(TransactionalGraph.Conclusion.SUCCESS)
